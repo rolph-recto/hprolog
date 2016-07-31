@@ -16,8 +16,25 @@ executable hprolog
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
+  other-modules:       HProlog.Expr
+                     , HProlog.Parse
+                     , HProlog.Query
   build-depends:       base >= 4.7 && < 5
                      , text
                      , mtl
                      , containers
                      , transformers
+                     , parsec
+
+library
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  exposed-modules:     HProlog.Expr
+                     , HProlog.Parse
+                     , HProlog.Query
+  build-depends:       base >= 4.7 && < 5
+                     , text
+                     , mtl
+                     , containers
+                     , transformers
+                     , parsec

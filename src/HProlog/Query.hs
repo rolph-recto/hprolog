@@ -1,6 +1,5 @@
-module HProlog (
-  Pred(..), Expr(..), Rule(..)
-, unify, replSubVars, applySubExpr, applySubPred, query
+module HProlog.Query (
+  unify, replSubVars, applySubExpr, applySubPred, query
 ) where
 
 import Data.Monoid ((<>))
@@ -11,25 +10,7 @@ import qualified Data.Map.Strict as M
 import Control.Monad
 import Control.Monad.State
 
-import Debug.Trace
-
-data Pred = P T.Text [Expr] -- predicates or function names
-            deriving (Eq)
-
-data Expr = V T.Text        -- variable
-          | C T.Text        -- constant name
-          | F T.Text [Expr] -- function names
-          deriving (Eq)
-
-instance Show Pred where
-  show (P p args) = (T.unpack p) ++ "(" ++ (L.intercalate "," (map show args)) ++ ")"
-
-instance Show Expr where
-  show (V vname)  = T.unpack vname
-  show (C cname)  = T.unpack cname
-  show (F f args) = (T.unpack f) ++ "(" ++ (L.intercalate "," (map show args)) ++ ")"
-
-type Sub = [(T.Text,Expr)]
+import HProlog.Expr
 
 unify_ :: Bool -> Pred -> Pred -> Sub -> Maybe Sub
 unify_ occursCheck x y s
@@ -44,7 +25,8 @@ unify_ occursCheck x y s
           | V vx <- x     = unifyVar x y s
           | V vy <- y     = unifyVar y x s
           -- unify function names
-          | F fx xargs <- x, F fy yargs <- y, fx == fy, length xargs == length yargs =
+          | F fx xargs <- x, F fy yargs <- y, fx == fy,
+            length xargs == length yargs =
             foldr (unifyArg unifyExpr) s (zip xargs yargs)
           | otherwise     = Nothing
 
@@ -92,10 +74,6 @@ getExprVars (F _ args) = concatMap getExprVars args
 
 getPredVars :: Pred -> [T.Text]
 getPredVars (P _ args) = concatMap getExprVars args
-
-
--- rule: consequent, list of antecedents
-data Rule = Rule Pred [Pred] deriving (Show)
 
 type QueryM a = StateT (M.Map T.Text Int) [] a
 
