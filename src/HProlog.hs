@@ -4,6 +4,7 @@ module HProlog (
 ) where
 
 import Data.Monoid ((<>))
+import Data.Maybe
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
@@ -96,46 +97,56 @@ getPredVars (P _ args) = concatMap getExprVars args
 -- rule: consequent, list of antecedents
 data Rule = Rule Pred [Pred] deriving (Show)
 
+type QueryM a = StateT (M.Map T.Text Int) [] a
+
 query :: [Rule] -> Pred -> [Sub]
 query kb goal =
   let vars = getPredVars goal in
-  let subs = evalState (backwardChainOr goal []) M.empty in
+  let subs = evalStateT (backwardChainOr goal []) M.empty in
   map (filter (\(v,_) -> v `elem` vars)) subs
-  where backwardChainOr :: Pred -> Sub -> State (M.Map T.Text Int) [Sub]
+  where backwardChainOr :: Pred -> Sub -> QueryM Sub
         backwardChainOr goal sub = do
           let goalRules = getGoalRules goal
-          subs' <- forM goalRules $ \rule -> do
-            Rule rhs lhs <- getFreshVars rule
-            backwardChainAnd lhs (unifyNoOccurs rhs goal sub)
-          return (concat subs')
+          goalRule <- getGoalRules goal
+          Rule head body <- getFreshVars goalRule
+          -- if the head of the rule fails to unify with the 
+          -- goal, then we kill this branch of the search path.
+          backwardChainAnd body (unifyNoOccurs head goal sub)
 
-        backwardChainAnd :: [Pred] -> Maybe Sub -> State (M.Map T.Text Int) [Sub]
+        backwardChainAnd :: [Pred] -> Maybe Sub -> QueryM Sub
         backwardChainAnd goals msub
-          | Nothing <- msub                 = return []
-          | Just sub <- msub, [] <- goals   = return [sub]
+          -- if m is a MonadPlus, then StateM s m a is a MonadPlus also
+          -- in this case, the mzero for list is [], which effectively
+          -- kills this branch of the search path.
+          | Nothing <- msub                 = mzero
+          | Just sub <- msub, [] <- goals   = return sub
           | Just sub <- msub, g:gs <- goals = do
-            subs' <- backwardChainOr (applySubPred sub g) sub
-            subs'' <- forM subs' $ \sub' -> backwardChainAnd gs (Just sub')
-            return (concat subs'')
+            -- we try to find a proof for the head
+            sub' <- backwardChainOr (applySubPred sub g) sub
+            -- then we try to find proofs for the rest of preds in the tail
+            backwardChainAnd gs (Just sub')
 
-        getGoalRules :: Pred -> [Rule]
+        -- get rules whose head *might* unify with the goal
+        getGoalRules :: Pred -> QueryM Rule
         getGoalRules (P pname args) =
           let arity = length args in
-          filter (isGoalRule pname arity) kb
+          let rules = filter (isGoalRule pname arity) kb in
+          StateT (\s -> map (,s) rules)
           where isGoalRule pname arity (Rule (P pname' args') _) =
                   pname == pname' && arity == length args'
-
-        getFreshVars :: Rule -> State (M.Map T.Text Int) Rule
+        
+        -- rewrite rule so it has fresh variables
+        getFreshVars :: Rule -> QueryM Rule
         getFreshVars (Rule rhs lhs) = do
           let vars = L.nub $ (getPredVars rhs) ++ (concatMap getPredVars lhs)
           sub <- forM vars $ \var -> do
             num <- getVarNumber var
             return (var, V (var <> (T.pack $ show num)))
-          let rhs' = applySubPred sub rhs
-          let lhs' = map (applySubPred sub) lhs
-          return (Rule rhs' lhs')
+          let head' = applySubPred sub rhs
+          let body' = map (applySubPred sub) lhs
+          return (Rule head' body')
             
-        getVarNumber :: T.Text -> State (M.Map T.Text Int) Int
+        getVarNumber :: T.Text -> QueryM Int
         getVarNumber var = do
           names <- get
           case M.lookup var names of
@@ -146,4 +157,3 @@ query kb goal =
               let n' = n + 1
               put $ M.insert var n' names
               return n
-                

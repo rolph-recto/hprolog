@@ -10,10 +10,12 @@ main = do
   let r2 = Rule (P "descendant" [V "x", V "y"]) [P "childOf" [V "x", V "z"], P "descendant" [V "z", V "y"]]
   let f1 = Rule (P "childOf" [C "Mary", C "Magdalene"]) []
   let f2 = Rule (P "childOf" [C "Magdalene", C "Martha"]) []
-  let q = P "descendant" [V "x", C "Martha"]
+  let q = P "descendant" [C "Martha", C "Mary"]
   let result = query [r1,r2,f1,f2] q
   putStrLn $ "Query: " ++ (show q)
-  loop result
+  if length result > 0
+  then loop $ filter (\s -> length s > 0) result
+  else putStrLn "No."
   where loop []     = putStrLn "Yes."
         loop (s:ss) = do
           putStrLn $ showSub $ replSubVars s

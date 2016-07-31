@@ -17,7 +17,7 @@ flags: {}
 extra-package-dbs: []
 
 ghc-options:
-  hprolog: -XOverloadedStrings -XBangPatterns
+  hprolog: -XOverloadedStrings -XBangPatterns -XTupleSections
 
 # Control whether we use the GHC we find on the path
 # system-ghc: true
