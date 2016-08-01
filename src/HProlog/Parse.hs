@@ -31,7 +31,7 @@ parseFunc :: Parsec String () Expr
 parseFunc = parseNameWithArgs F
 
 parseExpr :: Parsec String () Expr
-parseExpr = parseConst <|> parseVar <|> parseFunc
+parseExpr = (try parseFunc) <|> (try parseConst) <|> parseVar
 
 parseNameWithArgs :: (T.Text -> [Expr] -> a) -> Parsec String () a
 parseNameWithArgs f = do
@@ -67,7 +67,7 @@ removeWhitespace = L.intercalate "" . L.words
 
 parseAssert :: String-> Either ParseError Rule
 parseAssert text = parse
-                    (parseStmt $ parseRule <|> parseFact)
+                    (parseStmt $ (try parseRule) <|> parseFact)
                     ""
                     (removeWhitespace text)
 

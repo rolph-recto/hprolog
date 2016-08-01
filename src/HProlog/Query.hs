@@ -12,6 +12,8 @@ import Control.Monad.State
 
 import HProlog.Expr
 
+import Debug.Trace
+
 unify_ :: Bool -> Pred -> Pred -> Sub -> Maybe Sub
 unify_ occursCheck x y s
   | P px xargs <- x, P py yargs <- y, px == py, length xargs == length yargs =
@@ -89,18 +91,24 @@ query kb goal =
           Rule head body <- getFreshVars goalRule
           -- if the head of the rule fails to unify with the 
           -- goal, then we kill this branch of the search path.
-          backwardChainAnd body (unifyNoOccurs head goal sub)
+          let sub' = unifyNoOccurs head goal sub
+          backwardChainAnd body sub'
 
         backwardChainAnd :: [Pred] -> Maybe Sub -> QueryM Sub
         backwardChainAnd goals msub
           -- if m is a MonadPlus, then StateM s m a is a MonadPlus also
           -- in this case, the mzero for list is [], which effectively
           -- kills this branch of the search path.
-          | Nothing <- msub                 = mzero
-          | Just sub <- msub, [] <- goals   = return sub
+          | Nothing <- msub                 = do
+            mzero
+
+          | Just sub <- msub, [] <- goals   = do
+            return sub
+
           | Just sub <- msub, g:gs <- goals = do
             -- we try to find a proof for the head
-            sub' <- backwardChainOr (applySubPred sub g) sub
+            let g' = applySubPred sub g
+            sub' <- backwardChainOr g' sub
             -- then we try to find proofs for the rest of preds in the tail
             backwardChainAnd gs (Just sub')
 
@@ -115,13 +123,13 @@ query kb goal =
         
         -- rewrite rule so it has fresh variables
         getFreshVars :: Rule -> QueryM Rule
-        getFreshVars (Rule rhs lhs) = do
-          let vars = L.nub $ (getPredVars rhs) ++ (concatMap getPredVars lhs)
+        getFreshVars (Rule head body) = do
+          let vars = L.nub $ (getPredVars head) ++ (concatMap getPredVars body)
           sub <- forM vars $ \var -> do
             num <- getVarNumber var
-            return (var, V (var <> (T.pack $ show num)))
-          let head' = applySubPred sub rhs
-          let body' = map (applySubPred sub) lhs
+            return (var, V (var <> "#" <> (T.pack $ show num)))
+          let head' = applySubPred sub head
+          let body' = map (applySubPred sub) body
           return (Rule head' body')
             
         getVarNumber :: T.Text -> QueryM Int

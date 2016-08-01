@@ -25,6 +25,7 @@ executable hprolog
                      , containers
                      , transformers
                      , parsec
+                     , MissingH
 
 library
   hs-source-dirs:      src
@@ -38,3 +39,5 @@ library
                      , containers
                      , transformers
                      , parsec
+                     , MissingH
+

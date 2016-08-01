@@ -2,36 +2,70 @@ import qualified Data.List as L
 import qualified Data.Char as C
 import qualified Data.Text as T
 import Control.Monad
+import System.IO
 
 import HProlog.Expr
 import HProlog.Query
 import HProlog.Parse
 
 main = do
-  let r1 = Rule (P "descendant" [V "X", V "Y"]) [P "childOf" [V "X", V "Y"]]
-  let r2 = Rule (P "descendant" [V "X", V "Y"]) [P "childOf" [V "X", V "Z"], P "descendant" [V "Z", V "Y"]]
-  let f1 = Rule (P "childOf" [C "mary", C "magdalene"]) []
-  let f2 = Rule (P "childOf" [C "magdalene", C "martha"]) []
-  putStr "> "
-  queryStr <- getLine
-  case parseQuery queryStr of
-    Left err -> print err
-    Right q -> do
-      let result = query [r1,r2,f1,f2] q
-      putStrLn $ "Query: " ++ (show q)
-      if length result > 0
-      then loop q $ filter (\s -> length s > 0) result
-      else putStrLn "No."
+  hSetBuffering stdout NoBuffering
+  loop []
+  where loop :: [Rule] -> IO ()
+        loop kb = do
+          putStr ">> "
+          queryStr <- getLine
+          let queryStrWords = L.words queryStr
+          if length queryStrWords == 0
+          then loop kb
+          else do
+            case queryStrWords of
+              "tell":queryStrTail' -> do
+                case parseAssert $ L.unwords queryStrTail' of
+                  Left err -> print err >> loop kb
+                  Right rule -> loop (rule:kb)
+                
+              "ask":queryStrTail' -> do
+                case parseQuery $ L.unwords queryStrTail' of
+                  Left err -> print err >> loop kb
+                  Right q -> do
+                    let results = query kb q
+                    if length results == 0
+                    then do
+                      putStrLn "No." >> loop kb
+                      loop kb
+                    else do
+                      printResult q $ filter (\s -> length s > 0) results
+                      loop kb
 
-  where loop q []     = putStrLn "Yes."
-        loop q (s:ss) = do
+              "clear":[] -> do
+                putStrLn "Knowledge base cleared."
+                loop []
+
+              "kb":[] -> do
+                forM kb print
+                loop kb
+
+              "exit":[] ->
+                return ()
+
+              "quit":[] ->
+                return ()
+                
+              otherwise -> do
+                putStrLn "Unknown command."
+                loop kb
+
+        printResult q []     = putStrLn "Yes."
+        printResult q (s:ss) = do
           putStrLn (show q)
           putStrLn $ showSub $ replSubVars s
           putStrLn "Next? (Y/N)"
           input <- getLine
           if map C.toLower input == "y"
-          then loop q ss
+          then printResult q ss
           else return ()
+
         showSub s =
           let showSubst (v,e) = (T.unpack v) ++ " => " ++ (show e) in
           L.intercalate ", " $ map showSubst s

@@ -24,5 +24,9 @@ instance Show Expr where
 type Sub = [(T.Text,Expr)]
 
 -- rule: consequent, list of antecedents
-data Rule = Rule Pred [Pred] deriving (Show)
+data Rule = Rule Pred [Pred]
+
+instance Show Rule where
+  show (Rule head [])   = show head
+  show (Rule head body) = (show head) ++ " <= " ++ (L.intercalate ", " $ map show body)
 
