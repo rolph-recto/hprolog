@@ -100,6 +100,7 @@ getPredVars :: Pred -> [T.Text]
 getPredVars (P _ args) = concatMap getExprVars args
 
 type QueryM a = StateT (M.Map T.Text Int) [] a
+
 query :: [Rule] -> Pred -> [Sub]
 query kb goal = 
   let subs    = evalStateT (backwardChainOr goal []) M.empty in

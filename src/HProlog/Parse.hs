@@ -6,8 +6,10 @@ import Data.Monoid ((<>))
 import Text.Parsec
 import qualified Data.Text as T
 import qualified Data.List as L
+import Data.String.Utils as S
 
 import HProlog.Expr
+import Debug.Trace
 
 -- name must start with a lowercase character
 parseName :: Parsec String () T.Text
@@ -62,11 +64,21 @@ parseStmt f = do
   optional $ char '.'
   return stmt
 
+removeComments :: String -> String
+removeComments =
+  -- let's make this unreadable using
+  -- pointfree notation and the reader monad!
+  L.unlines . filter f . map S.lstrip . L.lines
+  where f = do
+          x <- ((> 0) . length)
+          y <- ((/= ';') . head)
+          return (x && y)
+
 removeWhitespace :: String -> String
 removeWhitespace = L.intercalate "" . L.words
 
 preprocessInput :: String -> String
-preprocessInput = removeWhitespace
+preprocessInput = removeWhitespace . removeComments
 
 parseAssert :: String-> Either ParseError Rule
 parseAssert text =
