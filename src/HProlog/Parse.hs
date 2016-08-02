@@ -1,5 +1,5 @@
 module HProlog.Parse (
-  parseAssert, parseQuery
+  parseAssert, parseFile, parseQuery
 ) where
 
 import Data.Monoid ((<>))
@@ -65,14 +65,19 @@ parseStmt f = do
 removeWhitespace :: String -> String
 removeWhitespace = L.intercalate "" . L.words
 
+preprocessInput :: String -> String
+preprocessInput = removeWhitespace
+
 parseAssert :: String-> Either ParseError Rule
-parseAssert text = parse
-                    (parseStmt $ (try parseRule) <|> parseFact)
-                    ""
-                    (removeWhitespace text)
+parseAssert text =
+  let f = parseStmt $ (try parseRule) <|> parseFact in
+  parse f "" $ preprocessInput text
+
+parseFile :: String -> Either ParseError [Rule]
+parseFile text =
+  let f = many $ parseStmt $ (try parseRule) <|> parseFact in
+  parse f "" $ preprocessInput text
 
 parseQuery :: String-> Either ParseError Pred
-parseQuery text = parse
-                    (parseStmt parsePred)
-                    ""
-                    (removeWhitespace text)
+parseQuery text =
+  parse (parseStmt parsePred) "" $ preprocessInput text

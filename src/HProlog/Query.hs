@@ -1,5 +1,6 @@
 module HProlog.Query (
-  unify, replSubVars, applySubExpr, applySubPred, query
+  unify, replSubVars, applySubExpr, applySubPred,
+  removeUnseenVars, getPredVars, query
 ) where
 
 import Data.Monoid ((<>))
@@ -62,7 +63,9 @@ applySubExpr sub (V var)        = maybe (V var) id (lookup var sub)
 -- replace variables in substitutions
 -- e.g. [y/father(x), x/jane] becomes [y/father(jane), x/jane]
 replSubVars :: Sub -> Sub
-replSubVars sub = map (\(v,vs) -> (v,applySubExpr sub vs)) sub
+replSubVars sub = map replSubVar sub
+  where replSubVar (v,vs) =
+          let applyExpr = applySubExpr sub vs in (v, applyExpr)
 
 -- apply a substitution to a predicate
 applySubPred :: Sub -> Pred -> Pred
@@ -79,11 +82,19 @@ getPredVars (P _ args) = concatMap getExprVars args
 
 type QueryM a = StateT (M.Map T.Text Int) [] a
 
+removeUnseenVars :: [T.Text] -> Sub -> Sub
+removeUnseenVars vars [] = []
+removeUnseenVars vars ((v,!vs):ss)
+  | v `elem` vars = (v,vs):(removeUnseenVars vars ss)
+  | otherwise     = removeUnseenVars vars ss
+
 query :: [Rule] -> Pred -> [Sub]
-query kb goal =
-  let vars = getPredVars goal in
-  let subs = evalStateT (backwardChainOr goal []) M.empty in
-  map (filter (\(v,_) -> v `elem` vars)) subs
+query kb goal = 
+  let subs    = evalStateT (backwardChainOr goal []) M.empty in
+  -- let vars    = getPredVars goal in
+  -- let subs'   = map (replSubVars . toposortSub) subs in
+  -- map (removeUnseenVars vars) subs'
+  subs
   where backwardChainOr :: Pred -> Sub -> QueryM Sub
         backwardChainOr goal sub = do
           let goalRules = getGoalRules goal
@@ -143,3 +154,18 @@ query kb goal =
               let n' = n + 1
               put $ M.insert var n' names
               return n
+
+        -- topologically sort subs based on the occurences
+        -- of vars in the substitution
+        toposortSub :: Sub -> Sub
+        toposortSub s = toposortSub_ subGraph s
+          where toposortSub_ g [] = []
+                toposortSub_ g s  =
+                  let (x:xs) = L.sortBy (cmpInEdges g) s in
+                  x:(toposortSub_ (filter (\(n,_) -> n /= fst x) g) xs)
+                makeEdges (name, F _ args) = concatMap (curry makeEdges name) args
+                makeEdges (name, V vname)  = [(name, vname)]
+                makeEdges (name, C _)      = []
+                subGraph = map makeEdges s >>= id
+                cmpInEdges g (n1,_) (n2,_) = inEdges g n2 `compare` inEdges g n1
+                inEdges g n = length $ filter (\(_,n') -> n == n') g

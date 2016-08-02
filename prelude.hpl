@@ -1,0 +1,5 @@
+append(nil,Y,Y).
+append(cons(H,T1),Y,cons(H,T2)) <= append(T1,Y,T2).
+
+member(X,cons(X,T)).
+member(X,cons(Y,T)) <= member(X,T).

@@ -2,7 +2,9 @@ import qualified Data.List as L
 import qualified Data.Char as C
 import qualified Data.Text as T
 import Control.Monad
+
 import System.IO
+import System.Directory (doesFileExist)
 
 import HProlog.Expr
 import HProlog.Query
@@ -51,6 +53,24 @@ main = do
 
               "quit":[] ->
                 return ()
+
+              "load":file:[] -> do
+                fileExists <- doesFileExist file
+                if fileExists
+                then do
+                  withFile file ReadMode $ \h -> do
+                    filestr <- hGetContents h
+                    case parseFile filestr of
+                      Left err -> do
+                        print err
+                        loop kb
+                    
+                      Right asserts -> do
+                        loop (kb ++ asserts)
+
+                  else do
+                    putStrLn "File doesn't exist!"
+                    loop kb
                 
               otherwise -> do
                 putStrLn "Unknown command."
@@ -60,13 +80,16 @@ main = do
         printResult q (s:ss) = do
           putStrLn (show q)
           putStrLn $ showSub $ replSubVars s
-          putStrLn "Next? (Y/N)"
-          input <- getLine
-          if map C.toLower input == "y"
+          if length ss == 0
           then printResult q ss
-          else return ()
+          else do
+            putStrLn "Next? (Y/N)"
+            input <- getLine
+            if map C.toLower input == "y"
+            then printResult q ss
+            else return ()
 
         showSub s =
           let showSubst (v,e) = (T.unpack v) ++ " => " ++ (show e) in
-          L.intercalate ", " $ map showSubst s
+          L.intercalate "\n" $ map showSubst s
 
