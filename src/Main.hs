@@ -79,7 +79,7 @@ main = do
         printResult q []     = putStrLn "Yes."
         printResult q (s:ss) = do
           putStrLn (show q)
-          putStrLn $ showSub $ replSubVars s
+          putStrLn $ showSub s
           if length ss == 0
           then printResult q ss
           else do

@@ -1,6 +1,5 @@
 module HProlog.Query (
-  unify, replSubVars, applySubExpr, applySubPred,
-  removeUnseenVars, getPredVars, query
+  unify, replSubVars, applySubExpr, applySubPred, getPredVars, query
 ) where
 
 import Data.Monoid ((<>))
@@ -60,17 +59,37 @@ applySubExpr sub (C const)      = C const
 applySubExpr sub (F fname args) = F fname (map (applySubExpr sub) args)
 applySubExpr sub (V var)        = maybe (V var) id (lookup var sub)
 
--- replace variables in substitutions
--- e.g. [y/father(x), x/jane] becomes [y/father(jane), x/jane]
-replSubVars :: Sub -> Sub
-replSubVars sub = map replSubVar sub
-  where replSubVar (v,vs) =
-          let applyExpr = applySubExpr sub vs in (v, applyExpr)
-
 -- apply a substitution to a predicate
 applySubPred :: Sub -> Pred -> Pred
 applySubPred s (P pname args) =
   let s' = replSubVars s in P pname (map (applySubExpr s') args)
+
+-- topologically sort subs based on the occurences
+-- of vars in the substitution
+toposortSub :: Sub -> Sub
+toposortSub s = toposortSub_ subGraph s
+  where toposortSub_ g [] = []
+        toposortSub_ g s  =
+          let (x:xs) = L.sortBy (cmpInEdges g) s in
+          x:(toposortSub_ (filter (\(n,_) -> n /= fst x) g) xs)
+        makeEdges (name, F _ args) = concatMap (curry makeEdges name) args
+        makeEdges (name, V vname)  = [(name, vname)]
+        makeEdges (name, C _)      = []
+        subGraph = concatMap makeEdges s
+        cmpInEdges g (n1,_) (n2,_) = inEdges g n2 `compare` inEdges g n1
+        inEdges g n = length $ filter (\(_,n') -> n == n') g
+
+-- replace variables in substitutions
+-- e.g. [y/father(x), x/jane] becomes [y/father(jane), x/jane]
+replSubVars :: Sub -> Sub
+replSubVars s = replSubVars_ $ toposortSub s
+  where replSubVars_ [] = []
+        replSubVars_ (x@(name,val):xs) =
+          x:(replSubVars_ $ zip (map fst xs) $ map (replVar name val) $ map snd xs)
+        replVar name sub val
+          | F vname args <- val           = F vname $ map (replVar name sub) args
+          | V vname <- val, name == vname = sub
+          | otherwise                     = val
 
 getExprVars :: Expr -> [T.Text]
 getExprVars (C _)      = []
@@ -81,20 +100,13 @@ getPredVars :: Pred -> [T.Text]
 getPredVars (P _ args) = concatMap getExprVars args
 
 type QueryM a = StateT (M.Map T.Text Int) [] a
-
-removeUnseenVars :: [T.Text] -> Sub -> Sub
-removeUnseenVars vars [] = []
-removeUnseenVars vars ((v,!vs):ss)
-  | v `elem` vars = (v,vs):(removeUnseenVars vars ss)
-  | otherwise     = removeUnseenVars vars ss
-
 query :: [Rule] -> Pred -> [Sub]
 query kb goal = 
   let subs    = evalStateT (backwardChainOr goal []) M.empty in
-  -- let vars    = getPredVars goal in
-  -- let subs'   = map (replSubVars . toposortSub) subs in
-  -- map (removeUnseenVars vars) subs'
-  subs
+  let subs'   = map replSubVars subs in
+  let vars    = getPredVars goal in
+  let subs''  = map (filter (\(v,_) -> v `elem` vars)) subs' in
+  subs''
   where backwardChainOr :: Pred -> Sub -> QueryM Sub
         backwardChainOr goal sub = do
           let goalRules = getGoalRules goal
@@ -155,17 +167,3 @@ query kb goal =
               put $ M.insert var n' names
               return n
 
-        -- topologically sort subs based on the occurences
-        -- of vars in the substitution
-        toposortSub :: Sub -> Sub
-        toposortSub s = toposortSub_ subGraph s
-          where toposortSub_ g [] = []
-                toposortSub_ g s  =
-                  let (x:xs) = L.sortBy (cmpInEdges g) s in
-                  x:(toposortSub_ (filter (\(n,_) -> n /= fst x) g) xs)
-                makeEdges (name, F _ args) = concatMap (curry makeEdges name) args
-                makeEdges (name, V vname)  = [(name, vname)]
-                makeEdges (name, C _)      = []
-                subGraph = map makeEdges s >>= id
-                cmpInEdges g (n1,_) (n2,_) = inEdges g n2 `compare` inEdges g n1
-                inEdges g n = length $ filter (\(_,n') -> n == n') g
