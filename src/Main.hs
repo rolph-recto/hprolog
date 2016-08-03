@@ -5,6 +5,7 @@ import Control.Monad
 
 import System.IO
 import System.Directory (doesFileExist)
+import System.Console.ANSI
 
 import HProlog.Expr
 import HProlog.Query

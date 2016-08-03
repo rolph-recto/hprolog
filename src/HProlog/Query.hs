@@ -9,6 +9,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import Control.Monad
 import Control.Monad.State
+import Control.Monad.Trans.List
 
 import HProlog.Expr
 
@@ -99,11 +100,11 @@ getExprVars (F _ args) = concatMap getExprVars args
 getPredVars :: Pred -> [T.Text]
 getPredVars (P _ args) = concatMap getExprVars args
 
-type QueryM a = StateT (M.Map T.Text Int) [] a
+type QueryM a = ListT (State (M.Map T.Text Int)) a
 
 query :: [Rule] -> Pred -> [Sub]
 query kb goal = 
-  let subs    = evalStateT (backwardChainOr goal []) M.empty in
+  let subs    = flip evalState M.empty $ runListT (backwardChainOr goal []) in
   let subs'   = map replSubVars subs in
   let vars    = getPredVars goal in
   let subs''  = map (filter (\(v,_) -> v `elem` vars)) subs' in
@@ -141,7 +142,7 @@ query kb goal =
         getGoalRules (P pname args) =
           let arity = length args in
           let rules = filter (isGoalRule pname arity) kb in
-          StateT (\s -> map (,s) rules)
+          ListT $ state $ \s -> (rules, s)
           where isGoalRule pname arity (Rule (P pname' args') _) =
                   pname == pname' && arity == length args'
         
